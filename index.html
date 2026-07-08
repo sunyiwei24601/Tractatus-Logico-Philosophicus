@@ -79,9 +79,23 @@
         padding: 6px 9px;
         border-radius: 999px;
         color: var(--muted);
-        cursor: pointer;
+        cursor: grab;
         font: 800 12px/1 ui-sans-serif, system-ui, sans-serif;
         user-select: none;
+      }
+
+      .lang-option:active { cursor: grabbing; }
+
+      .lang-option.dragging {
+        opacity: 0.42;
+        outline: 1px dashed var(--accent);
+      }
+
+      .lang-option::after {
+        content: "⋮⋮";
+        color: #b7a492;
+        font-size: 10px;
+        letter-spacing: -2px;
       }
 
       .lang-option:has(input:checked) {
@@ -531,7 +545,6 @@
       const note = document.querySelector('#note');
       const search = document.querySelector('#search');
       const langPicker = document.querySelector('#langPicker');
-      const langInputs = [...document.querySelectorAll('input[name="lang"]')];
       const font = document.querySelector('#font');
       const toggle = document.querySelector('#toggle');
       const sourceNotesToggle = document.querySelector('#sourceNotesToggle');
@@ -543,6 +556,7 @@
       const expandedTranslations = new Set();
       const expandedNodes = new Set(['root', '2', '2.2']);
       const annotationStorageKey = 'tractatus-tree-reader-annotations-v1';
+      const languageOrderStorageKey = 'tractatus-tree-reader-language-order-v1';
       const annotations = loadAnnotations();
       const languageOrder = Object.keys(payload.labels);
       const sourceNotes = payload.notes || {};
@@ -580,6 +594,7 @@
       );
       let expanded = false;
       let showSourceNotes = true;
+      let draggedLangOption = null;
 
       function annotationCount() {
         return Object.values(annotations).filter(value => String(value || '').trim()).length;
@@ -675,8 +690,58 @@
         return highlight(code.startsWith('zh') ? glossChinese(text) : text, query);
       }
 
+      function languageOptions() {
+        return [...langPicker.querySelectorAll('.lang-option')];
+      }
+
+      function languageInputs() {
+        return languageOptions().map(option => option.querySelector('input[name="lang"]')).filter(Boolean);
+      }
+
+      function normalizeLanguageOrder(codes) {
+        const known = new Set(languageOrder);
+        const seen = new Set();
+        const saved = (Array.isArray(codes) ? codes : []).filter(code => {
+          if (!known.has(code) || seen.has(code)) return false;
+          seen.add(code);
+          return true;
+        });
+        return [...saved, ...languageOrder.filter(code => !seen.has(code))];
+      }
+
+      function prepareLanguageOptions() {
+        languageOptions().forEach(option => {
+          const input = option.querySelector('input[name="lang"]');
+          if (!input) return;
+          option.dataset.lang = input.value;
+          option.draggable = true;
+          option.title = '拖动调整译本显示顺序';
+        });
+      }
+
+      function applySavedLanguageOrder() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(languageOrderStorageKey) || '[]');
+          const byCode = new Map(languageOptions().map(option => [option.dataset.lang, option]));
+          normalizeLanguageOrder(saved).forEach(code => {
+            const option = byCode.get(code);
+            if (option) langPicker.appendChild(option);
+          });
+        } catch {
+          // Ignore invalid local ordering data and keep the default order.
+        }
+      }
+
+      function saveLanguageOrder() {
+        try {
+          localStorage.setItem(languageOrderStorageKey, JSON.stringify(languageInputs().map(input => input.value)));
+        } catch {
+          // Reordering is a convenience feature; the page should still work without localStorage.
+        }
+      }
+
       function checkedLanguages() {
-        return langInputs.filter(input => input.checked).map(input => input.value);
+        return languageInputs().filter(input => input.checked).map(input => input.value);
       }
 
       function selectedLanguages() {
@@ -861,6 +926,11 @@
         document.body.classList.add(`font-${font.value}`);
       }
 
+      function shouldKeepTextSelection(event) {
+        const selectedText = window.getSelection()?.toString().trim();
+        return Boolean(selectedText) || Boolean(event.target.closest('.snippet, .inline-translation, .source-notes, .version p'));
+      }
+
       function render() {
         const query = search.value.trim();
         const children = payload.tree.map(node => renderNode(node, query)).join('');
@@ -881,6 +951,35 @@
         }
         render();
       });
+      langPicker.addEventListener('dragstart', event => {
+        const option = event.target.closest('.lang-option');
+        if (!option) return;
+        draggedLangOption = option;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', option.dataset.lang || '');
+        requestAnimationFrame(() => option.classList.add('dragging'));
+      });
+      langPicker.addEventListener('dragover', event => {
+        if (!draggedLangOption) return;
+        const target = event.target.closest('.lang-option');
+        if (!target || target === draggedLangOption) return;
+        event.preventDefault();
+        const rect = target.getBoundingClientRect();
+        const afterTarget = event.clientX > rect.left + rect.width / 2;
+        langPicker.insertBefore(draggedLangOption, afterTarget ? target.nextSibling : target);
+      });
+      langPicker.addEventListener('drop', event => {
+        if (!draggedLangOption) return;
+        event.preventDefault();
+        saveLanguageOrder();
+        render();
+      });
+      langPicker.addEventListener('dragend', () => {
+        if (draggedLangOption) draggedLangOption.classList.remove('dragging');
+        draggedLangOption = null;
+        saveLanguageOrder();
+        render();
+      });
       font.addEventListener('change', applyFontMode);
       tree.addEventListener('click', event => {
         const deleteButton = event.target.closest('.annotation-delete');
@@ -893,6 +992,7 @@
           return;
         }
         if (event.target.closest('.annotation-panel')) return;
+        if (shouldKeepTextSelection(event)) return;
         const summary = event.target.closest('summary');
         if (!summary) return;
         event.preventDefault();
@@ -915,6 +1015,7 @@
           return;
         }
         if (event.target.closest('.annotation-panel')) return;
+        if (shouldKeepTextSelection(event)) return;
         const summary = event.target.closest('summary');
         if (!summary) return;
         if (event.target.closest('.expand-btn')) return;
@@ -1008,6 +1109,8 @@
           importFile.value = '';
         }
       });
+      prepareLanguageOptions();
+      applySavedLanguageOrder();
       applyFontMode();
       render();
     </script>
