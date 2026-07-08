@@ -510,6 +510,7 @@
         <option value="sans">Sans</option>
       </select>
       <button id="toggle" type="button">展开全部</button>
+      <button id="sourceNotesToggle" type="button">隐藏注释</button>
       <button id="exportNotes" type="button">导出批注</button>
       <button id="importNotes" type="button">导入批注</button>
       <input class="importer" id="importFile" type="file" accept="application/json,.json" />
@@ -535,6 +536,7 @@
       const langInputs = [...document.querySelectorAll('input[name="lang"]')];
       const font = document.querySelector('#font');
       const toggle = document.querySelector('#toggle');
+      const sourceNotesToggle = document.querySelector('#sourceNotesToggle');
       const exportNotes = document.querySelector('#exportNotes');
       const importNotes = document.querySelector('#importNotes');
       const importFile = document.querySelector('#importFile');
@@ -579,6 +581,7 @@
         'g'
       );
       let expanded = false;
+      let showSourceNotes = true;
 
       function annotationCount() {
         return Object.values(annotations).filter(value => String(value || '').trim()).length;
@@ -700,6 +703,7 @@
       }
 
       function selectedSourceNotes(node) {
+        if (!showSourceNotes) return [];
         return selectedLanguages()
           .map(code => ({ code, label: payload.labels[code], notes: sourceNotes[code]?.[node.number] || [] }))
           .filter(group => group.notes.length);
@@ -718,7 +722,7 @@
       }
 
       function hasSelectedSourceNotes(node) {
-        return selectedLanguages().some(code => sourceNotes[code]?.[node.number]?.length);
+        return showSourceNotes && selectedLanguages().some(code => sourceNotes[code]?.[node.number]?.length);
       }
 
       function renderAnnotationInline(text) {
@@ -962,6 +966,11 @@
         }
         document.querySelectorAll('details.node').forEach(detail => { detail.open = expanded; });
         toggle.textContent = expanded ? '收起全部' : '展开全部';
+      });
+      sourceNotesToggle.addEventListener('click', () => {
+        showSourceNotes = !showSourceNotes;
+        sourceNotesToggle.textContent = showSourceNotes ? '隐藏注释' : '显示注释';
+        render();
       });
       exportNotes.addEventListener('click', () => {
         const payload = {
