@@ -992,10 +992,10 @@
           return;
         }
         if (event.target.closest('.annotation-panel')) return;
-        if (shouldKeepTextSelection(event)) return;
         const summary = event.target.closest('summary');
         if (!summary) return;
         event.preventDefault();
+        if (shouldKeepTextSelection(event)) return;
         const detail = summary.closest('details.node');
         const button = event.target.closest('.expand-btn');
         if (!button || button.disabled || !detail) return;
