@@ -995,10 +995,11 @@
         const summary = event.target.closest('summary');
         if (!summary) return;
         event.preventDefault();
-        if (shouldKeepTextSelection(event)) return;
         const detail = summary.closest('details.node');
         const button = event.target.closest('.expand-btn');
-        if (!button || button.disabled || !detail) return;
+        if (!button) return;
+        event.stopPropagation();
+        if (button.disabled || !detail) return;
         detail.open = !detail.open;
         if (detail.open) {
           expandedNodes.add(detail.dataset.number);
