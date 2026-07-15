@@ -675,20 +675,51 @@
       const annotations = loadAnnotations();
       const languageOrder = Object.keys(payload.labels);
       const sourceNotes = payload.notes || {};
+      // Canonical terms come from the Oxford edition glossary, supplemented by
+      // fixed phrases whose complete English wording appears in the propositions.
       const zhGlosses = [
-        ['基本命题', 'elementary propositions'],
+        ['真正的概念', 'real concept'],
+        ['命题结构', 'propositional structure'],
+        ['命题记号', 'propositional sign'],
+        ['命题符号', 'propositional sign'],
+        ['命题变项', 'propositional variable'],
+        ['命题变元', 'propositional variable'],
+        ['形式概念', 'formal concept'],
+        ['形式属性', 'formal property'],
+        ['形式性质', 'formal property'],
+        ['形式系列', 'form-series'],
+        ['形式序列', 'form-series'],
+        ['真正概念', 'real concept'],
+        ['专有概念', 'real concept'],
+        ['固有概念', 'real concept'],
+        ['逻辑记号法', 'concept-script'],
+        ['概念文字', 'concept-script'],
+        ['内部关系', 'internal relation'],
+        ['内在关系', 'internal relation'],
+        ['外部关系', 'external relation'],
+        ['外在关系', 'external relation'],
+        ['真值函项', 'truth-function'],
+        ['真值函数', 'truth-function'],
+        ['主目位置', 'argument-place'],
+        ['符号语言', 'sign-language'],
+        ['记号语言', 'sign-language'],
+        ['初始概念', 'primitive idea'],
+        ['伪命题', 'pseudo-proposition'],
+        ['伪概念', 'pseudo-concept'],
+        ['逻辑形式', 'logical form'],
+        ['基本命题', 'elementary proposition'],
         ['逻辑空间', 'logical space'],
-        ['简单记号', 'simple signs'],
+        ['简单记号', 'simple sign'],
         ['重言式', 'tautology'],
         ['矛盾式', 'contradiction'],
-        ['复合物', 'complexes'],
-        ['事态', 'states of affairs'],
-        ['事实', 'facts'],
-        ['事情', 'cases'],
-        ['事物', 'things'],
-        ['对象', 'objects'],
-        ['名称', 'names'],
-        ['命题', 'propositions'],
+        ['复合物', 'complex'],
+        ['事态', 'state-of-things'],
+        ['事实', 'fact'],
+        ['事情', 'case'],
+        ['事物', 'thing'],
+        ['对象', 'object'],
+        ['名称', 'name'],
+        ['命题', 'proposition'],
         ['实体', 'substance'],
         ['形式', 'form'],
         ['结构', 'structure'],
@@ -697,6 +728,13 @@
         ['实在', 'reality'],
         ['意义', 'sense'],
         ['指谓', 'meaning/reference'],
+        ['表达式', 'expression'],
+        ['原型', 'prototype'],
+        ['主目', 'argument'],
+        ['函项', 'function'],
+        ['函数', 'function'],
+        ['概念', 'concept'],
+        ['记号', 'sign'],
       ];
       const zhGlossMap = new Map(zhGlosses);
       const zhGlossPattern = new RegExp(
@@ -794,7 +832,9 @@
 
       function glossChinese(text) {
         const seen = new Set();
-        return String(text || '').replace(zhGlossPattern, term => {
+        return String(text || '').replace(zhGlossPattern, (term, offset, source) => {
+          const suffix = source.slice(offset + term.length);
+          if (/^[（(]\s*[A-Za-z]/.test(suffix)) return term;
           if (seen.has(term)) return term;
           seen.add(term);
           return `${term}（${zhGlossMap.get(term)}）`;
