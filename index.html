@@ -663,11 +663,18 @@
       const importFile = document.querySelector('#importFile');
       const allNodes = flatten(payload.tree);
       const nodeByNumber = new Map(allNodes.map(node => [node.number, node]));
-      const expandedTranslations = new Set();
-      const expandedNodes = new Set(['root', '2', '2.2']);
       const annotationStorageKey = 'tractatus-tree-reader-annotations-v1';
       const languageOrderStorageKey = 'tractatus-tree-reader-language-order-v1';
       const zoomStorageKey = 'tractatus-tree-reader-zoom-v1';
+      const expandedNodesStorageKey = 'tractatus-tree-reader-expanded-nodes-v1';
+      const expandedTranslationsStorageKey = 'tractatus-tree-reader-expanded-translations-v1';
+      const expandableNodeNumbers = allNodes.filter(node => node.children.length).map(node => node.number);
+      const expandedNodes = loadExpandedSet(expandedNodesStorageKey, ['root', '2', '2.2'], value => {
+        return value === 'root' || nodeByNumber.has(value);
+      });
+      const expandedTranslations = loadExpandedSet(expandedTranslationsStorageKey, [], value => {
+        return nodeByNumber.has(value);
+      });
       const zoomMin = 10;
       const zoomMax = 160;
       const zoomStep = 10;
@@ -745,7 +752,6 @@
           .join('|'),
         'g'
       );
-      let expanded = false;
       let showSourceNotes = true;
       let draggedLangOption = null;
 
@@ -781,6 +787,36 @@
           note.textContent = '批注保存失败：当前浏览器可能禁用了本地存储。';
           return false;
         }
+      }
+
+      function loadExpandedSet(storageKey, fallback, isValid) {
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (raw === null) return new Set(fallback);
+          const saved = JSON.parse(raw);
+          if (!Array.isArray(saved)) return new Set(fallback);
+          return new Set(saved.filter(value => typeof value === 'string' && isValid(value)));
+        } catch {
+          return new Set(fallback);
+        }
+      }
+
+      function saveExpandedState() {
+        try {
+          localStorage.setItem(expandedNodesStorageKey, JSON.stringify([...expandedNodes]));
+          localStorage.setItem(expandedTranslationsStorageKey, JSON.stringify([...expandedTranslations]));
+        } catch {
+          // Expansion remains available for this session when storage is unavailable.
+        }
+      }
+
+      function allBranchesExpanded() {
+        return expandedNodes.has('root')
+          && expandableNodeNumbers.every(number => expandedNodes.has(number));
+      }
+
+      function syncExpandAllButton() {
+        toggle.textContent = allBranchesExpanded() ? '收起全部' : '展开全部';
       }
 
       function escapeHtml(value) {
@@ -1196,6 +1232,7 @@
         } else {
           expandedTranslations.add(number);
         }
+        saveExpandedState();
         render();
         if (!previousRect) return;
         const nextNode = [...tree.querySelectorAll('details.node')]
@@ -1292,6 +1329,8 @@
         } else {
           expandedNodes.delete(detail.dataset.number);
         }
+        saveExpandedState();
+        syncExpandAllButton();
       });
       tree.addEventListener('dblclick', event => {
         const annotationPreview = event.target.closest('.annotation-preview');
@@ -1328,15 +1367,18 @@
         }, 0);
       });
       toggle.addEventListener('click', () => {
-        expanded = !expanded;
-        if (expanded) {
+        const expandAll = !allBranchesExpanded();
+        if (expandAll) {
           expandedNodes.add('root');
-          allNodes.forEach(node => expandedNodes.add(node.number));
+          expandableNodeNumbers.forEach(number => expandedNodes.add(number));
         } else {
           expandedNodes.clear();
         }
-        document.querySelectorAll('details.node').forEach(detail => { detail.open = expanded; });
-        toggle.textContent = expanded ? '收起全部' : '展开全部';
+        saveExpandedState();
+        document.querySelectorAll('details.node').forEach(detail => {
+          detail.open = expandAll && (detail.dataset.number === 'root' || expandableNodeNumbers.includes(detail.dataset.number));
+        });
+        syncExpandAllButton();
       });
       sourceNotesToggle.addEventListener('click', () => {
         showSourceNotes = !showSourceNotes;
@@ -1384,6 +1426,7 @@
       prepareLanguageOptions();
       applySavedLanguageOrder();
       applyFontMode();
+      syncExpandAllButton();
       render();
       applyZoom(treeZoom, false);
     </script>
