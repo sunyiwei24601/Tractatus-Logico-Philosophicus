@@ -7,6 +7,7 @@ const appStorageKeys = [
   'tractatus-tree-reader-zoom-v1',
   'tractatus-tree-reader-expanded-nodes-v1',
   'tractatus-tree-reader-expanded-translations-v1',
+  'tractatus-tree-reader-center-card-v1',
 ];
 
 test.beforeEach(async ({ page }) => {
@@ -67,6 +68,45 @@ test('persists zoom level', async ({ page }) => {
   await expect(page.locator('#zoomValue')).toHaveText('70%');
   await page.reload();
   await expect(page.locator('#zoomValue')).toHaveText('70%');
+});
+
+test('restores the card at the viewport center', async ({ page }) => {
+  await page.locator('#toggle').click();
+  const targetNumber = '4.211';
+  await page.evaluate(number => {
+    const canvas = document.querySelector('.canvas');
+    const bubble = document.querySelector(`details[data-number="${number}"] > summary .bubble`);
+    const canvasRect = canvas.getBoundingClientRect();
+    const bubbleRect = bubble.getBoundingClientRect();
+    const centerX = canvasRect.left + canvas.clientLeft + canvas.clientWidth / 2;
+    const centerY = canvasRect.top + canvas.clientTop + canvas.clientHeight / 2;
+    canvas.scrollLeft += bubbleRect.left + bubbleRect.width / 2 - centerX;
+    canvas.scrollTop += bubbleRect.top + bubbleRect.height / 2 - centerY;
+  }, targetNumber);
+  await expect.poll(async () => page.evaluate(() => {
+    return localStorage.getItem('tractatus-tree-reader-center-card-v1');
+  })).toBe(targetNumber);
+
+  await page.reload();
+  await expect.poll(async () => page.evaluate(number => {
+    const canvas = document.querySelector('.canvas');
+    const centerX = canvas.getBoundingClientRect().left + canvas.clientLeft + canvas.clientWidth / 2;
+    const centerY = canvas.getBoundingClientRect().top + canvas.clientTop + canvas.clientHeight / 2;
+    let nearest = null;
+    let distance = Number.POSITIVE_INFINITY;
+    document.querySelectorAll('details.node > summary .bubble').forEach(bubble => {
+      const rect = bubble.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const nextDistance = Math.hypot(
+        rect.left + rect.width / 2 - centerX,
+        rect.top + rect.height / 2 - centerY,
+      );
+      if (nextDistance >= distance) return;
+      distance = nextDistance;
+      nearest = bubble.closest('details.node')?.dataset.number || null;
+    });
+    return nearest;
+  }, targetNumber)).toBe(targetNumber);
 });
 
 test('persists annotations', async ({ page }) => {

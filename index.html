@@ -669,6 +669,7 @@
       const zoomStorageKey = 'tractatus-tree-reader-zoom-v1';
       const expandedNodesStorageKey = 'tractatus-tree-reader-expanded-nodes-v1';
       const expandedTranslationsStorageKey = 'tractatus-tree-reader-expanded-translations-v1';
+      const centerCardStorageKey = 'tractatus-tree-reader-center-card-v1';
       const expandableNodeNumbers = allNodes.filter(node => node.children.length).map(node => node.number);
       const expandedNodes = loadExpandedSet(expandedNodesStorageKey, ['root', '2', '2.2'], value => {
         return value === 'root' || nodeByNumber.has(value);
@@ -755,6 +756,8 @@
       );
       let showSourceNotes = true;
       let draggedLangOption = null;
+      let centerSaveTimer = null;
+      let restoringCenterCard = false;
 
       function annotationCount() {
         return Object.values(annotations).filter(value => String(value || '').trim()).length;
@@ -1290,6 +1293,42 @@
         canvas.scrollTop += rect.top + rect.height / 2 - center.y;
       }
 
+      function saveCenterCardState() {
+        if (restoringCenterCard) return;
+        const number = centerCardNumber();
+        if (!number) return;
+        try {
+          localStorage.setItem(centerCardStorageKey, number);
+        } catch {
+          // The reader remains usable when browser storage is unavailable.
+        }
+      }
+
+      function scheduleCenterCardSave() {
+        if (restoringCenterCard) return;
+        clearTimeout(centerSaveTimer);
+        centerSaveTimer = setTimeout(saveCenterCardState, 120);
+      }
+
+      function restoreCenterCardState() {
+        let number = null;
+        try {
+          number = localStorage.getItem(centerCardStorageKey);
+        } catch {
+          return;
+        }
+        const bubble = visibleBubble(number);
+        if (!bubble) return;
+        restoringCenterCard = true;
+        requestAnimationFrame(() => {
+          centerBubble(bubble);
+          requestAnimationFrame(() => { restoringCenterCard = false; });
+        });
+      }
+
+      canvas.addEventListener('scroll', scheduleCenterCardSave, { passive: true });
+      window.addEventListener('pagehide', saveCenterCardState);
+
       function toggleTranslation(number, anchor) {
         const currentNode = anchor?.closest('details.node');
         const previousRect = currentNode?.getBoundingClientRect();
@@ -1504,6 +1543,7 @@
       syncExpandAllButton();
       render();
       applyZoom(treeZoom, false);
+      restoreCenterCardState();
     </script>
   </body>
 </html>
