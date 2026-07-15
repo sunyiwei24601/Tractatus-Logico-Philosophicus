@@ -598,6 +598,7 @@
       const payload = JSON.parse(document.querySelector('#data').textContent);
       payload.note = payload.note.replace('双击节点气泡显示多译本正文和原书注释', '点击序号旁的详情按钮显示多译本正文和原书注释（也支持双击卡片）');
       const tree = document.querySelector('#tree');
+      const canvas = document.querySelector('.canvas');
       const note = document.querySelector('#note');
       const search = document.querySelector('#search');
       const langPicker = document.querySelector('#langPicker');
@@ -1006,6 +1007,24 @@
         return Boolean(selectedText) || Boolean(event.target.closest('.snippet, .inline-translation, .source-notes, .version p'));
       }
 
+      function toggleTranslation(number, anchor) {
+        const currentNode = anchor?.closest('details.node');
+        const previousRect = currentNode?.getBoundingClientRect();
+        if (expandedTranslations.has(number)) {
+          expandedTranslations.delete(number);
+        } else {
+          expandedTranslations.add(number);
+        }
+        render();
+        if (!previousRect) return;
+        const nextNode = [...tree.querySelectorAll('details.node')]
+          .find(detail => detail.dataset.number === number);
+        const nextRect = nextNode?.getBoundingClientRect();
+        if (!nextRect) return;
+        canvas.scrollLeft += nextRect.left - previousRect.left;
+        canvas.scrollTop += nextRect.top - previousRect.top;
+      }
+
       function render() {
         const query = search.value.trim();
         const children = payload.tree.map(node => renderNode(node, query)).join('');
@@ -1062,12 +1081,7 @@
           event.preventDefault();
           event.stopPropagation();
           const number = detailButton.dataset.number;
-          if (expandedTranslations.has(number)) {
-            expandedTranslations.delete(number);
-          } else {
-            expandedTranslations.add(number);
-          }
-          render();
+          toggleTranslation(number, detailButton);
           return;
         }
         const deleteButton = event.target.closest('.annotation-delete');
@@ -1114,12 +1128,7 @@
         const detail = summary.closest('details.node');
         const number = detail?.dataset.number;
         if (!number || number === 'root') return;
-        if (expandedTranslations.has(number)) {
-          expandedTranslations.delete(number);
-        } else {
-          expandedTranslations.add(number);
-        }
-        render();
+        toggleTranslation(number, summary);
       });
       tree.addEventListener('input', event => {
         const editor = event.target.closest('.annotation-editor');
