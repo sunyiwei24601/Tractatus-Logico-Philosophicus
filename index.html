@@ -1224,6 +1224,49 @@
         applyZoomAt(treeZoom * factor, event.clientX, event.clientY);
       }, { passive: false });
 
+      function canvasCenter() {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: rect.left + canvas.clientLeft + canvas.clientWidth / 2,
+          y: rect.top + canvas.clientTop + canvas.clientHeight / 2,
+        };
+      }
+
+      function visibleBubble(number) {
+        if (!number) return null;
+        const detail = [...tree.querySelectorAll('details.node')]
+          .find(node => node.dataset.number === number);
+        const bubble = detail?.querySelector(':scope > summary .bubble');
+        const rect = bubble?.getBoundingClientRect();
+        return rect?.width && rect?.height ? bubble : null;
+      }
+
+      function centerCardNumber() {
+        const center = canvasCenter();
+        let nearest = null;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+        tree.querySelectorAll('details.node > summary .bubble').forEach(bubble => {
+          const rect = bubble.getBoundingClientRect();
+          if (!rect.width || !rect.height) return;
+          const distance = Math.hypot(
+            rect.left + rect.width / 2 - center.x,
+            rect.top + rect.height / 2 - center.y,
+          );
+          if (distance >= nearestDistance) return;
+          nearestDistance = distance;
+          nearest = bubble.closest('details.node')?.dataset.number || null;
+        });
+        return nearest;
+      }
+
+      function centerBubble(bubble) {
+        if (!bubble) return;
+        const center = canvasCenter();
+        const rect = bubble.getBoundingClientRect();
+        canvas.scrollLeft += rect.left + rect.width / 2 - center.x;
+        canvas.scrollTop += rect.top + rect.height / 2 - center.y;
+      }
+
       function toggleTranslation(number, anchor) {
         const currentNode = anchor?.closest('details.node');
         const previousRect = currentNode?.getBoundingClientRect();
@@ -1323,6 +1366,8 @@
         if (!button) return;
         event.stopPropagation();
         if (button.disabled || !detail) return;
+        const collapsing = detail.open;
+        const previousCenterNumber = collapsing ? centerCardNumber() : null;
         detail.open = !detail.open;
         if (detail.open) {
           expandedNodes.add(detail.dataset.number);
@@ -1331,6 +1376,11 @@
         }
         saveExpandedState();
         syncExpandAllButton();
+        if (collapsing) {
+          requestAnimationFrame(() => {
+            centerBubble(visibleBubble(previousCenterNumber) || visibleBubble(detail.dataset.number));
+          });
+        }
       });
       tree.addEventListener('dblclick', event => {
         const annotationPreview = event.target.closest('.annotation-preview');
