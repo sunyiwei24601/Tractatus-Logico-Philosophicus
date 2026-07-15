@@ -227,7 +227,38 @@
         border-left-color: #d7c9b8;
       }
 
-      details.node:not([open]) + ul { display: none; }
+      details.node:not([open]) + ul,
+      details.node:not([open]) + .child-levels { display: none; }
+
+      .child-levels {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 34px;
+      }
+
+      .child-levels::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        border-left: 1px solid var(--branch);
+      }
+
+      .child-levels > .child-level-group {
+        z-index: 1;
+        margin: 0 0 34px;
+        padding: 46px 22px 22px;
+        border: 1px solid #d7c9b8;
+        border-radius: 24px;
+        background: rgba(250, 244, 233, 0.94);
+        box-shadow: 0 10px 28px rgba(55, 42, 29, 0.06);
+      }
+
+      .child-levels > .child-level-group:last-child { margin-bottom: 0; }
+      .child-levels > .child-level-group::before { height: 46px; }
 
       .node { position: relative; z-index: 2; }
       .node summary { list-style: none; cursor: pointer; }
@@ -892,9 +923,25 @@
 
       function renderNode(node, query, isFine = false) {
         if (!branchMatches(node, query)) return '';
-        const children = node.children
-          .map(child => renderNode(child, query, isFineComment(node, child)))
-          .join('');
+        const visibleChildren = node.children.filter(child => branchMatches(child, query));
+        const renderedChildren = visibleChildren
+          .map(child => renderNode(child, query, isFineComment(node, child)));
+        let children = renderedChildren.join('');
+        let childrenMarkup = children ? `<ul>${children}</ul>` : '';
+        if (/^\d+$/.test(node.number) && visibleChildren.length) {
+          const groups = new Map();
+          visibleChildren.forEach((child, index) => {
+            const precision = child.number.split('.')[1]?.length || 0;
+            if (!groups.has(precision)) groups.set(precision, []);
+            groups.get(precision).push(renderedChildren[index]);
+          });
+          if (groups.size > 1) {
+            childrenMarkup = `<div class="child-levels">${[...groups.entries()]
+              .sort(([left], [right]) => right - left)
+              .map(([precision, items]) => `<ul class="child-level-group" data-precision="${precision}">${items.join('')}</ul>`)
+              .join('')}</div>`;
+          }
+        }
         const open = query || expandedNodes.has(node.number) ? ' open' : '';
         const childCount = flatten(node.children).length;
         const translationOpen = expandedTranslations.has(node.number);
@@ -917,7 +964,7 @@
               </span>
             </summary>
           </details>
-          ${children ? `<ul>${children}</ul>` : ''}
+          ${childrenMarkup}
         </li>`;
       }
 
