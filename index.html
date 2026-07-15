@@ -111,6 +111,33 @@
 
       .importer { display: none; }
 
+      .zoom-controls {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--paper);
+      }
+
+      .zoom-controls button {
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font-size: 17px;
+      }
+
+      .zoom-controls button:hover { background: #efe5d5; }
+
+      .zoom-value {
+        min-width: 48px;
+        color: var(--muted);
+        font: 800 12px/1 ui-sans-serif, system-ui, sans-serif;
+        text-align: center;
+      }
+
       .note {
         padding: 10px 18px 0;
         color: var(--muted);
@@ -564,7 +591,9 @@
         header { align-items: stretch; }
         .brand { width: 100%; }
         input[type="search"], select, button, .lang-picker { width: 100%; }
-        .detail-toggle, .expand-btn { width: auto; }
+        .detail-toggle, .expand-btn, .zoom-controls button { width: auto; }
+        .zoom-controls { justify-content: center; width: 100%; }
+        .zoom-controls button { width: 36px; }
         .lang-picker { justify-content: space-between; }
         .workspace { height: auto; padding: 14px; }
         .canvas { height: calc(100vh - 360px); min-height: 360px; padding: 28px 22px 70px; }
@@ -588,6 +617,12 @@
         <option value="kaiti">楷体</option>
         <option value="sans">Sans</option>
       </select>
+      <div class="zoom-controls" role="group" aria-label="树图缩放">
+        <button id="zoomOut" type="button" aria-label="缩小树图" title="缩小">−</button>
+        <output class="zoom-value" id="zoomValue" aria-live="polite">100%</output>
+        <button id="zoomIn" type="button" aria-label="放大树图" title="放大">+</button>
+        <button id="zoomReset" type="button" aria-label="重置树图缩放" title="重置缩放">↺</button>
+      </div>
       <button id="toggle" type="button">展开全部</button>
       <button id="sourceNotesToggle" type="button">隐藏注释</button>
       <button id="exportNotes" type="button">导出批注</button>
@@ -615,6 +650,10 @@
       const search = document.querySelector('#search');
       const langPicker = document.querySelector('#langPicker');
       const font = document.querySelector('#font');
+      const zoomOut = document.querySelector('#zoomOut');
+      const zoomIn = document.querySelector('#zoomIn');
+      const zoomReset = document.querySelector('#zoomReset');
+      const zoomValue = document.querySelector('#zoomValue');
       const toggle = document.querySelector('#toggle');
       const sourceNotesToggle = document.querySelector('#sourceNotesToggle');
       const exportNotes = document.querySelector('#exportNotes');
@@ -626,6 +665,11 @@
       const expandedNodes = new Set(['root', '2', '2.2']);
       const annotationStorageKey = 'tractatus-tree-reader-annotations-v1';
       const languageOrderStorageKey = 'tractatus-tree-reader-language-order-v1';
+      const zoomStorageKey = 'tractatus-tree-reader-zoom-v1';
+      const zoomMin = 50;
+      const zoomMax = 160;
+      const zoomStep = 10;
+      let treeZoom = loadZoom();
       const annotations = loadAnnotations();
       const languageOrder = Object.keys(payload.labels);
       const sourceNotes = payload.notes || {};
@@ -1019,6 +1063,38 @@
         document.body.classList.add(`font-${font.value}`);
       }
 
+      function loadZoom() {
+        try {
+          const value = Number(localStorage.getItem(zoomStorageKey));
+          return Number.isFinite(value) && value >= zoomMin && value <= zoomMax ? value : 100;
+        } catch {
+          return 100;
+        }
+      }
+
+      function applyZoom(nextZoom, preserveCenter = true) {
+        const clamped = Math.min(zoomMax, Math.max(zoomMin, nextZoom));
+        const previousScale = treeZoom / 100;
+        const centerX = (canvas.scrollLeft + canvas.clientWidth / 2) / previousScale;
+        const centerY = (canvas.scrollTop + canvas.clientHeight / 2) / previousScale;
+        treeZoom = clamped;
+        tree.style.zoom = String(treeZoom / 100);
+        zoomValue.value = `${treeZoom}%`;
+        zoomValue.textContent = `${treeZoom}%`;
+        zoomOut.disabled = treeZoom <= zoomMin;
+        zoomIn.disabled = treeZoom >= zoomMax;
+        zoomReset.disabled = treeZoom === 100;
+        try {
+          localStorage.setItem(zoomStorageKey, String(treeZoom));
+        } catch {
+          // Zoom still works when browser storage is unavailable.
+        }
+        if (!preserveCenter) return;
+        const nextScale = treeZoom / 100;
+        canvas.scrollLeft = centerX * nextScale - canvas.clientWidth / 2;
+        canvas.scrollTop = centerY * nextScale - canvas.clientHeight / 2;
+      }
+
       function toggleTranslation(number, anchor) {
         const currentNode = anchor?.closest('details.node');
         const previousRect = currentNode?.getBoundingClientRect();
@@ -1087,6 +1163,9 @@
         render();
       });
       font.addEventListener('change', applyFontMode);
+      zoomOut.addEventListener('click', () => applyZoom(treeZoom - zoomStep));
+      zoomIn.addEventListener('click', () => applyZoom(treeZoom + zoomStep));
+      zoomReset.addEventListener('click', () => applyZoom(100));
       tree.addEventListener('click', event => {
         const detailButton = event.target.closest('.detail-toggle');
         if (detailButton) {
@@ -1213,6 +1292,7 @@
       applySavedLanguageOrder();
       applyFontMode();
       render();
+      applyZoom(treeZoom, false);
     </script>
   </body>
 </html>
