@@ -665,6 +665,7 @@
       const nodeByNumber = new Map(allNodes.map(node => [node.number, node]));
       const annotationStorageKey = 'tractatus-tree-reader-annotations-v1';
       const languageOrderStorageKey = 'tractatus-tree-reader-language-order-v1';
+      const selectedLanguagesStorageKey = 'tractatus-tree-reader-selected-languages-v1';
       const zoomStorageKey = 'tractatus-tree-reader-zoom-v1';
       const expandedNodesStorageKey = 'tractatus-tree-reader-expanded-nodes-v1';
       const expandedTranslationsStorageKey = 'tractatus-tree-reader-expanded-translations-v1';
@@ -928,6 +929,28 @@
           localStorage.setItem(languageOrderStorageKey, JSON.stringify(languageInputs().map(input => input.value)));
         } catch {
           // Reordering is a convenience feature; the page should still work without localStorage.
+        }
+      }
+
+      function applySavedLanguageSelection() {
+        try {
+          const raw = localStorage.getItem(selectedLanguagesStorageKey);
+          if (raw === null) return;
+          const saved = JSON.parse(raw);
+          if (!Array.isArray(saved)) return;
+          const valid = new Set(saved.filter(code => languageOrder.includes(code)));
+          if (!valid.size) return;
+          languageInputs().forEach(input => { input.checked = valid.has(input.value); });
+        } catch {
+          // Ignore invalid saved selections and keep the HTML defaults.
+        }
+      }
+
+      function saveLanguageSelection() {
+        try {
+          localStorage.setItem(selectedLanguagesStorageKey, JSON.stringify(checkedLanguages()));
+        } catch {
+          // Selection still works for this session when storage is unavailable.
         }
       }
 
@@ -1304,6 +1327,7 @@
         if (!checkedLanguages().length && event.target.matches('input[name="lang"]')) {
           event.target.checked = true;
         }
+        saveLanguageSelection();
         render();
       });
       langPicker.addEventListener('dragstart', event => {
@@ -1475,6 +1499,7 @@
       });
       prepareLanguageOptions();
       applySavedLanguageOrder();
+      applySavedLanguageSelection();
       applyFontMode();
       syncExpandAllButton();
       render();
